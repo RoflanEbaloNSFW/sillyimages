@@ -197,7 +197,7 @@ export function isImageModel(modelId) {
 }
 
 export function isGeminiModel(modelId) {
-    const mid = String(modelId || '').toLowerCase();
+    const mid = String(modelId || '').toLowerCase().trim().replace(/^google\//, '');
     // Принимаем как прокси-алиасы (nano-banana*), так и официальные id Google.
     return mid.includes('nano-banana')
         || mid.startsWith('gemini-2.5-flash-image')
@@ -215,7 +215,7 @@ export function isGeminiModel(modelId) {
  *   - `'unknown'` — вернётся optimistic default для прокси с кастомными id.
  */
 export function classifyGeminiModel(modelId) {
-    const id = String(modelId || '').toLowerCase().trim();
+    const id = String(modelId || '').toLowerCase().trim().replace(/^google\//, '');
     if (!id) return 'unknown';
 
     // Официальные id — проверяем точные префиксы.
@@ -234,8 +234,8 @@ export function classifyGeminiModel(modelId) {
 /**
  * Capabilities каждой Gemini-модели по официальным докам Google.
  *
- * - `maxReferences` — общее число входных картинок, которое модель обрабатывает
- *   с высокой точностью (3 / 11 / 14).
+ * - `maxReferences` — лимит входных картинок на запрос, используемый расширением.
+ *   Gemini 3 Image: 14; для 2.5 Flash сохраняется прежний лимит 3.
  * - `imageSizes` — whitelist значений для поля `imageConfig.imageSize`; для
  *   2.5 Flash Google игнорирует/не поддерживает параметр → `null`.
  * - `aspectRatios` — whitelist значений `imageConfig.aspectRatio`.
@@ -247,7 +247,7 @@ const GEMINI_CAPS = Object.freeze({
         aspectRatios: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'],
     },
     'gemini-3-pro-image': {
-        maxReferences: 11,
+        maxReferences: 14,
         imageSizes: ['1K', '2K', '4K'],
         aspectRatios: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
     },
@@ -452,6 +452,8 @@ export class Provider {
 // Таймаут для image-запросов. OpenAI допускает долгую генерацию на сложных
 // промптах, особенно gpt-image-*.
 const OPENAI_REQUEST_TIMEOUT_MS = 600_000;
+// Images API /edits limit; keep the generic unknown-model fallback unchanged.
+const GPT_IMAGE_MAX_REFERENCE_IMAGES = 16;
 
 /**
  * Классификация модели OpenAI-совместимого API.
@@ -481,13 +483,13 @@ function isGptImageFamily(kind) {
 
 /**
  * Максимум референсов, поддерживаемых конкретной моделью в `/v1/images/edits`:
- *   - gpt-image-*: до `MAX_GENERATION_REFERENCE_IMAGES` (мультиреф `image[]`).
+ *   - gpt-image-*: до 16 (мультиреф `image[]`).
  *   - flux-1-kontext-*: 1 (у Flux Kontext дизайн — один reference).
  *   - dall-e-2: 1.
  *   - dall-e-3 / unknown: 0 — через /edits они не ходят.
  */
 function getOpenAIModelMaxReferences(kind) {
-    if (isGptImageFamily(kind)) return MAX_GENERATION_REFERENCE_IMAGES;
+    if (isGptImageFamily(kind)) return GPT_IMAGE_MAX_REFERENCE_IMAGES;
     if (kind === 'flux-kontext') return 1;
     if (kind === 'dall-e-2') return 1;
     return 0;
@@ -738,7 +740,7 @@ export class OpenAIProvider extends Provider {
 
     async collectReferences({ prompt: _prompt, messageId, matchedAdditionalRefs = [] }) {
         const modelKind = classifyOpenAIModel(getSettings().model);
-        // Flux Kontext принимает только 1 reference; gpt-image-* — до MAX.
+        // Flux Kontext принимает только 1 reference; gpt-image-* — до 16.
         const maxRefs = getOpenAIModelMaxReferences(modelKind) || MAX_GENERATION_REFERENCE_IMAGES;
         return collectImageEditReferences({ messageId, matchedAdditionalRefs }, maxRefs, 'base64');
     }

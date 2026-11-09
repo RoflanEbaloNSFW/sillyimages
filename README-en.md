@@ -128,13 +128,19 @@ Per-request reference limits depend on the model:
 
 | Model / family | Max refs |
 |----------------|---------:|
-| OpenAI gpt-image-* | 5 |
+| OpenAI / Electron Hub gpt-image-* | 16 |
 | xAI Grok Imagine Image | 3 |
 | OpenAI / Electron Hub flux-1-kontext-* | 1 |
 | Gemini 2.5 Flash Image (Nano Banana) | 3 |
-| Gemini 3 Pro Image (Nano Banana Pro) | 11 |
+| Gemini 3 Pro Image (Nano Banana Pro) | 14 |
 | Gemini 3.1 Flash Image (Nano Banana 2) | 14 |
 | OpenRouter (Gemini via OR) | = GEMINI model |
+
+Gemini model detection accepts both the official ID and its `google/`-prefixed proxy form, including `google/gemini-3.1-flash-image`. The full configured model ID is preserved in API requests. Unknown models retain the existing fallback of 5 references.
+
+Limits count all attached images together, including avatars and previous-image context. These are request limits, not a guarantee of equally accurate identity preservation for that many characters. A proxy may impose a lower limit; its acceptance of the full count requires a live test.
+
+Sources: [Gemini 3 Pro Image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-pro-image), [Gemini 3.1 Flash Image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image), [OpenAI Images edits](https://developers.openai.com/api/reference/resources/images/methods/edit).
 
 ### Import / export lorebooks
 

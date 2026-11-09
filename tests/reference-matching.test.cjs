@@ -392,3 +392,91 @@ test('a name absent from the prompt causes no reference fetch or attachment', as
     assert.equal(body.reference_objects, undefined);
     assert.equal(body.prompt, 'An empty bedroom');
 });
+
+test('Gemini proxy IDs use model limits without changing other provider limits', async () => {
+    const { providers, settingsModule } = await loadExtension();
+    for (const [model, limit] of [
+        ['gemini-3-pro-image', 14],
+        ['google/gemini-3-pro-image', 14],
+        ['google/gemini-3-pro-image-preview', 14],
+        [' GOOGLE/GEMINI-3.1-FLASH-IMAGE ', 14],
+        ['google/gemini-3.1-flash-image-preview', 14],
+        ['google/gemini-2.5-flash-image', 3],
+        ['nano-banana-pro', 14], ['nano-banana-2', 14], ['nano-banana', 3],
+    ]) {
+        assert.equal(providers.isGeminiModel(model), true, model);
+        assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'gemini', model }), limit, model);
+    }
+    for (const model of ['google/gemini-3-pro-image', 'google/gemini-3.1-flash-image']) {
+        assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'openrouter', model }), 14);
+    }
+    assert.equal(settingsModule.MAX_GENERATION_REFERENCE_IMAGES, 5);
+    assert.equal(providers.isGeminiModel('other/gemini-3-pro-image'), false);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'gemini', model: 'custom-image' }), 5);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'openrouter', model: 'custom-image' }), 5);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'xai', model: 'grok-imagine-image' }), 3);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'openai', model: 'flux-1-kontext-pro' }), 1);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'openai', model: 'dall-e-2' }), 1);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'openai', model: 'dall-e-3' }), 0);
+});
+
+function numberedReferences(count) {
+    return Array.from({ length: count }, (_, index) => ({
+        name: `Person${index + 1}`, description: `Reference ${index + 1}`,
+        imagePath: `/reference-${index + 1}.png`, enabled: true,
+    }));
+}
+
+test('Gemini sends 14 references for Pro and Flash while preserving the proxy model ID', async () => {
+    for (const [model, limit] of [
+        ['google/gemini-3-pro-image', 14],
+        ['google/gemini-3.1-flash-image', 14],
+        ['google/gemini-2.5-flash-image', 3],
+    ]) {
+        const { settings, providers, requests } = await loadExtension({
+            respond: (_url, init = {}) => init.method === 'POST'
+                ? Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'AA==' } }] } }] })
+                : new Response(new Uint8Array([0]), { headers: { 'Content-Type': 'image/png' } }),
+        });
+        Object.assign(settings, { apiType: 'gemini', model, sendUserAvatar: false, sendCharAvatar: false, imageContextEnabled: false });
+        const provider = providers.resolveActiveProvider(settings);
+        const references = await provider.collectReferences({ matchedAdditionalRefs: numberedReferences(20) });
+        assert.equal(references.length, limit, model);
+        assert.deepEqual(requests.map(request => request.url), numberedReferences(limit).map(ref => ref.imagePath));
+        await provider.generate({ prompt: 'A group portrait', references, options: { characterDescriptionPromptBlock: '' } });
+        const request = requests.find(request => request.method === 'POST');
+        assert.equal(request.url, `https://example.test/v1beta/models/${model}:generateContent`);
+        const body = JSON.parse(request.body);
+        assert.equal(body.contents[0].parts.filter(part => part.inlineData).length, limit, model);
+    }
+});
+
+test('OpenRouter Gemini collection keeps the full 14-image budget', async () => {
+    for (const model of ['google/gemini-3-pro-image', 'google/gemini-3.1-flash-image']) {
+        const { settings, providers, requests } = await loadExtension();
+        Object.assign(settings, { apiType: 'openrouter', model, sendUserAvatar: false, sendCharAvatar: false, imageContextEnabled: false });
+        const references = await providers.resolveActiveProvider(settings).collectReferences({ matchedAdditionalRefs: numberedReferences(20) });
+        assert.equal(references.length, 14);
+        assert.deepEqual(requests.map(request => request.url), numberedReferences(14).map(ref => ref.imagePath));
+    }
+});
+
+test('GPT Image UI limits and multipart requests use 16 images on OpenAI-compatible providers', async () => {
+    for (const apiType of ['openai', 'electronhub']) {
+        const { settings, providers, requests } = await loadExtension();
+        for (const model of ['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5', 'gpt-image-2', 'openai/gpt-image-1.5']) {
+            assert.equal(providers.getActiveProviderMaxReferences({ apiType, model }), 16, `${apiType}: ${model}`);
+        }
+        const model = 'openai/gpt-image-1.5';
+        Object.assign(settings, { apiType, model, sendUserAvatar: false, sendCharAvatar: false, imageContextEnabled: false });
+        const provider = providers.resolveActiveProvider(settings);
+        const references = await provider.collectReferences({ matchedAdditionalRefs: numberedReferences(20) });
+        assert.equal(references.length, 16);
+        assert.deepEqual(requests.map(request => request.url), numberedReferences(16).map(ref => ref.imagePath));
+        await provider.generate({ prompt: 'A group portrait', references, options: { characterDescriptionPromptBlock: '' } });
+        const request = requests.find(request => request.method === 'POST');
+        assert.match(request.url, /\/v1\/images\/edits$/);
+        assert.equal(request.body.get('model'), model);
+        assert.equal(request.body.getAll('image[]').length, 16);
+    }
+});

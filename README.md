@@ -128,13 +128,19 @@ LLM видит тот же формат, но понимает: есть реа�
 
 | Модель / семейство | Max refs |
 |--------------------|---------:|
-| OpenAI gpt-image-* | 5 |
+| OpenAI / Electron Hub gpt-image-* | 16 |
 | xAI Grok Imagine Image | 3 |
 | OpenAI / Electron Hub flux-1-kontext-* | 1 |
 | Gemini 2.5 Flash Image (Nano Banana) | 3 |
-| Gemini 3 Pro Image (Nano Banana Pro) | 11 |
+| Gemini 3 Pro Image (Nano Banana Pro) | 14 |
 | Gemini 3.1 Flash Image (Nano Banana 2) | 14 |
 | OpenRouter (Gemini через OR) | = GEMINI-модель |
+
+Gemini распознаётся как по официальному имени модели, так и с префиксом `google/`, включая `google/gemini-3.1-flash-image`. В API-запросе полное настроенное имя модели сохраняется. Для неизвестных моделей остаётся прежний запасной лимит 5 референсов.
+
+Лимит учитывает все приложенные картинки вместе: референсы, аватары и контекст предыдущих изображений. Это предел количества вложений, а не гарантия одинаковой точности внешности для такого числа персонажей. Прокси может вводить более низкий предел; приём полного количества нужно проверять реальной генерацией.
+
+Источники: [Gemini 3 Pro Image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-pro-image), [Gemini 3.1 Flash Image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image), [OpenAI Images edits](https://developers.openai.com/api/reference/resources/images/methods/edit).
 
 ### Импорт / экспорт лорбуков
 
