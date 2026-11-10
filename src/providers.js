@@ -209,6 +209,7 @@ export function isGeminiModel(modelId) {
  * Классификация модели Gemini Image.
  *
  * Возвращает одну из:
+ *   - `'gemini-nano-banana-2.1'` (Nano Banana 2.1)
  *   - `'gemini-3.1-flash-image'` (Nano Banana 2 Preview)
  *   - `'gemini-3-pro-image'`     (Nano Banana Pro Preview)
  *   - `'gemini-2.5-flash-image'` (Nano Banana — stable)
@@ -217,6 +218,9 @@ export function isGeminiModel(modelId) {
 export function classifyGeminiModel(modelId) {
     const id = String(modelId || '').toLowerCase().trim().replace(/^google\//, '');
     if (!id) return 'unknown';
+
+    // Nano Banana 2.1 must precede the broader nano-banana-2 alias below.
+    if (/(?:^|[-/ ])nano[- ]banana[- ]2\.1(?:$|[-/ ])/.test(id)) return 'gemini-nano-banana-2.1';
 
     // Официальные id — проверяем точные префиксы.
     if (id.startsWith('gemini-3.1-flash-image')) return 'gemini-3.1-flash-image';
@@ -235,12 +239,17 @@ export function classifyGeminiModel(modelId) {
  * Capabilities каждой Gemini-модели по официальным докам Google.
  *
  * - `maxReferences` — лимит входных картинок на запрос, используемый расширением.
- *   Gemini 3 Image: 14; для 2.5 Flash сохраняется прежний лимит 3.
+ *   Nano Banana 2.1 и Gemini 3 Image: 14; для 2.5 Flash сохраняется лимит 3.
  * - `imageSizes` — whitelist значений для поля `imageConfig.imageSize`; для
  *   2.5 Flash Google игнорирует/не поддерживает параметр → `null`.
  * - `aspectRatios` — whitelist значений `imageConfig.aspectRatio`.
  */
 const GEMINI_CAPS = Object.freeze({
+    'gemini-nano-banana-2.1': {
+        maxReferences: 14,
+        imageSizes: ['1K', '2K', '4K'],
+        aspectRatios: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'],
+    },
     'gemini-3.1-flash-image': {
         maxReferences: 14,
         imageSizes: ['512', '1K', '2K', '4K'],
@@ -273,6 +282,7 @@ export function getGeminiCapabilities(modelId) {
  * Классификация OpenRouter image-модели по префиксу провайдера.
  *
  * Возвращает одну из:
+ *   - `'gemini-nano-banana-2.1'`
  *   - `'gemini-3.1-flash-image'`
  *   - `'gemini-3-pro-image'`
  *   - `'gemini-2.5-flash-image'`
@@ -298,7 +308,8 @@ export function classifyOpenRouterModel(modelId) {
 
 function isGeminiOpenRouterModel(modelId) {
     const kind = classifyOpenRouterModel(modelId);
-    return kind === 'gemini-3.1-flash-image'
+    return kind === 'gemini-nano-banana-2.1'
+        || kind === 'gemini-3.1-flash-image'
         || kind === 'gemini-3-pro-image'
         || kind === 'gemini-2.5-flash-image';
 }
@@ -306,7 +317,7 @@ function isGeminiOpenRouterModel(modelId) {
 /**
  * Общий whitelist aspect ratios для generic OpenRouter моделей (flux и др.)
  * Документация OpenRouter: эти пресеты маппятся в конкретные размеры на
- * их стороне. 1:4/4:1/1:8/8:1 поддерживает только gemini-3.1-flash-image.
+ * их стороне. Nano Banana 2.1 и 3.1 Flash также поддерживают 1:4/4:1/1:8/8:1.
  */
 const OPENROUTER_GENERIC_ASPECTS = Object.freeze(
     ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
@@ -318,7 +329,7 @@ const OPENROUTER_GENERIC_ASPECTS = Object.freeze(
  */
 export function getOpenRouterCapabilities(modelId) {
     const kind = classifyOpenRouterModel(modelId);
-    if (kind === 'gemini-3.1-flash-image' || kind === 'gemini-3-pro-image' || kind === 'gemini-2.5-flash-image') {
+    if (kind === 'gemini-nano-banana-2.1' || kind === 'gemini-3.1-flash-image' || kind === 'gemini-3-pro-image' || kind === 'gemini-2.5-flash-image') {
         return GEMINI_CAPS[kind];
     }
     // flux / sourceful / unknown — aspect_ratio допустим, image_size не передаём.
@@ -1376,7 +1387,7 @@ export class OpenRouterProvider extends Provider {
             aspectRatio = caps.aspectRatios.includes(settings.aspectRatio) ? settings.aspectRatio : '1:1';
         }
 
-        // image_size: только для Gemini 3 pro / 3.1 flash (список не null).
+        // image_size: для Gemini-моделей с явным списком разрешений в caps.
         let imageSize = null;
         if (Array.isArray(caps.imageSizes)) {
             imageSize = options.imageSize || settings.imageSize || '1K';

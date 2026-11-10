@@ -480,3 +480,87 @@ test('GPT Image UI limits and multipart requests use 16 images on OpenAI-compati
         assert.equal(request.body.getAll('image[]').length, 16);
     }
 });
+
+test('Nano Banana 2.1 has its own capabilities before the broad Banana 2 alias', async () => {
+    const { providers } = await loadExtension();
+    for (const model of [
+        'gemini-nano-banana-2.1', 'google/gemini-nano-banana-2.1',
+        'nano-banana-2.1', 'google/nano-banana-2.1',
+        ' GOOGLE/GEMINI-NANO-BANANA-2.1 ', 'gemini-nano-banana-2.1-preview',
+    ]) {
+        assert.equal(providers.isImageModel(model), true, model);
+        assert.equal(providers.isGeminiModel(model), true, model);
+        assert.equal(providers.classifyGeminiModel(model), 'gemini-nano-banana-2.1', model);
+        const caps = providers.getGeminiCapabilities(model);
+        assert.equal(caps.maxReferences, 14);
+        assert.deepEqual(Array.from(caps.imageSizes), ['1K', '2K', '4K']);
+        assert.ok(caps.aspectRatios.includes('8:1'));
+        assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'gemini', model }), 14);
+    }
+    const model = 'google/gemini-nano-banana-2.1';
+    assert.equal(providers.classifyGeminiModel('nano banana 2.1'), 'gemini-nano-banana-2.1');
+    assert.equal(providers.classifyOpenRouterModel(model), 'gemini-nano-banana-2.1');
+    assert.deepEqual(Array.from(providers.getOpenRouterCapabilities(model).imageSizes), ['1K', '2K', '4K']);
+    assert.equal(providers.getActiveProviderMaxReferences({ apiType: 'openrouter', model }), 14);
+    assert.equal(providers.classifyGeminiModel('nano-banana-2'), 'gemini-3.1-flash-image');
+    assert.ok(providers.getGeminiCapabilities('nano-banana-2').imageSizes.includes('512'));
+});
+
+test('Nano Banana 2.1 appears in native and proxy model lists without changing the selection', async () => {
+    for (const native of [true, false]) {
+        const listed = native ? 'gemini-nano-banana-2.1' : 'google/gemini-nano-banana-2.1';
+        const { settings, providers } = await loadExtension({
+            respond: url => url.includes('/v1beta/models')
+                ? native ? Response.json({ models: [{ name: `models/${listed}` }] }) : new Response('', { status: 404 })
+                : Response.json({ data: [{ id: listed }] }),
+        });
+        Object.assign(settings, { apiType: 'gemini', model: 'google/gemini-3-pro-image' });
+        const models = await providers.resolveActiveProvider(settings).fetchModels();
+        assert.deepEqual(Array.from(models), [listed]);
+        assert.equal(settings.model, 'google/gemini-3-pro-image');
+    }
+});
+
+test('Nano Banana 2.1 Gemini requests preserve the model and send 14 references at supported sizes', async () => {
+    const model = 'google/gemini-nano-banana-2.1';
+    const { settings, providers, requests } = await loadExtension({
+        respond: (_url, init = {}) => init.method === 'POST'
+            ? Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'AA==' } }] } }] })
+            : new Response(new Uint8Array([0]), { headers: { 'Content-Type': 'image/png' } }),
+    });
+    Object.assign(settings, { apiType: 'gemini', model, imageSize: '2K', sendUserAvatar: false, sendCharAvatar: false, imageContextEnabled: false });
+    const provider = providers.resolveActiveProvider(settings);
+    const references = await provider.collectReferences({ matchedAdditionalRefs: numberedReferences(20) });
+    assert.equal(references.length, 14);
+    for (const [requested, expected] of [['1K', '1K'], ['2K', '2K'], ['4K', '4K'], ['512', '2K']]) {
+        requests.length = 0;
+        await provider.generate({ prompt: 'A group portrait', references, options: { imageSize: requested, aspectRatio: '8:1', characterDescriptionPromptBlock: '' } });
+        const request = requests.find(request => request.method === 'POST');
+        assert.equal(request.url, `https://example.test/v1beta/models/${model}:generateContent`);
+        const body = JSON.parse(request.body);
+        assert.equal(body.contents[0].parts.filter(part => part.inlineData).length, 14);
+        assert.equal(body.generationConfig.imageConfig.imageSize, expected);
+        assert.equal(body.generationConfig.imageConfig.aspectRatio, '8:1');
+        assert.equal(settings.model, model);
+    }
+});
+
+test('Nano Banana 2.1 OpenRouter requests keep Gemini modalities and model-specific configuration', async () => {
+    const model = 'google/gemini-nano-banana-2.1';
+    const { settings, providers, requests } = await loadExtension({
+        respond: (_url, init = {}) => init.method === 'POST'
+            ? Response.json({ choices: [{ message: { images: [{ image_url: { url: 'data:image/png;base64,AA==' } }] } }] })
+            : new Response(new Uint8Array([0]), { headers: { 'Content-Type': 'image/png' } }),
+    });
+    Object.assign(settings, { apiType: 'openrouter', model, imageSize: '2K', sendUserAvatar: false, sendCharAvatar: false, imageContextEnabled: false });
+    const provider = providers.resolveActiveProvider(settings);
+    const references = await provider.collectReferences({ matchedAdditionalRefs: numberedReferences(20) });
+    assert.equal(references.length, 14);
+    await provider.generate({ prompt: 'A group portrait', references, options: { imageSize: '4K', aspectRatio: '1:8', characterDescriptionPromptBlock: '' } });
+    const body = JSON.parse(requests.find(request => request.method === 'POST').body);
+    assert.equal(body.model, model);
+    assert.deepEqual(body.modalities, ['image', 'text']);
+    assert.equal(body.messages[0].content.filter(part => part.type === 'image_url').length, 14);
+    assert.equal(body.image_config.image_size, '4K');
+    assert.equal(body.image_config.aspect_ratio, '1:8');
+});

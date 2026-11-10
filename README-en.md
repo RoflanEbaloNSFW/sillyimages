@@ -134,9 +134,12 @@ Per-request reference limits depend on the model:
 | Gemini 2.5 Flash Image (Nano Banana) | 3 |
 | Gemini 3 Pro Image (Nano Banana Pro) | 14 |
 | Gemini 3.1 Flash Image (Nano Banana 2) | 14 |
+| Gemini Nano Banana 2.1 | 14 |
 | OpenRouter (Gemini via OR) | = GEMINI model |
 
 Gemini model detection accepts both the official ID and its `google/`-prefixed proxy form, including `google/gemini-3.1-flash-image`. The full configured model ID is preserved in API requests. Unknown models retain the existing fallback of 5 references.
+
+Nano Banana 2.1 is recognized separately as `gemini-nano-banana-2.1`, `google/gemini-nano-banana-2.1`, or the proxy alias `nano-banana-2.1`. It supports `1K`, `2K`, and `4K`, including panoramic aspect ratios; `512` is not offered for this model. Gemini-compatible and OpenRouter-compatible connections both use this model-specific configuration. See the [Google model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/nano-banana-2-1).
 
 Limits count all attached images together, including avatars and previous-image context. These are request limits, not a guarantee of equally accurate identity preservation for that many characters. A proxy may impose a lower limit; its acceptance of the full count requires a live test.
 
@@ -205,7 +208,7 @@ Line format: `full-name (primary-trigger) — description`. If only one lorebook
 
 - Endpoint: `https://generativelanguage.googleapis.com` (or a proxy with the same format).
 - `POST /v1beta/models/{model}:generateContent` — inlineData parts for references + text.
-- Models: `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, `gemini-3.1-flash-image-preview`. Proxy aliases `nano-banana`, `nano-banana-pro`, `nano-banana-2` are supported.
+- Models: `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, `gemini-3.1-flash-image-preview`, `gemini-nano-banana-2.1`. Proxy aliases `nano-banana`, `nano-banana-pro`, `nano-banana-2`, `nano-banana-2.1` are supported.
 - `image_size` is omitted for 2.5 Flash (the model does not know the parameter).
 
 ### OpenRouter

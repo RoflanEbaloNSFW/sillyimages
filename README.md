@@ -134,9 +134,12 @@ LLM видит тот же формат, но понимает: есть реа�
 | Gemini 2.5 Flash Image (Nano Banana) | 3 |
 | Gemini 3 Pro Image (Nano Banana Pro) | 14 |
 | Gemini 3.1 Flash Image (Nano Banana 2) | 14 |
+| Gemini Nano Banana 2.1 | 14 |
 | OpenRouter (Gemini через OR) | = GEMINI-модель |
 
 Gemini распознаётся как по официальному имени модели, так и с префиксом `google/`, включая `google/gemini-3.1-flash-image`. В API-запросе полное настроенное имя модели сохраняется. Для неизвестных моделей остаётся прежний запасной лимит 5 референсов.
+
+Nano Banana 2.1 распознаётся отдельно по именам `gemini-nano-banana-2.1`, `google/gemini-nano-banana-2.1` и проксирующему алиасу `nano-banana-2.1`. Для неё доступны `1K`, `2K`, `4K` и панорамные соотношения сторон; `512` не предлагается. Эти параметры применяются как в Gemini-совместимом, так и в OpenRouter-совместимом подключении. См. [документацию модели Google](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/nano-banana-2-1).
 
 Лимит учитывает все приложенные картинки вместе: референсы, аватары и контекст предыдущих изображений. Это предел количества вложений, а не гарантия одинаковой точности внешности для такого числа персонажей. Прокси может вводить более низкий предел; приём полного количества нужно проверять реальной генерацией.
 
@@ -205,7 +208,7 @@ tavern (tavern) — cozy wooden inn
 
 - Endpoint: `https://generativelanguage.googleapis.com` (или прокси с тем же форматом).
 - `POST /v1beta/models/{model}:generateContent` — inlineData части для референсов + текст.
-- Модели: `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, `gemini-3.1-flash-image-preview`. Поддерживаются проксирующие алиасы `nano-banana`, `nano-banana-pro`, `nano-banana-2`.
+- Модели: `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, `gemini-3.1-flash-image-preview`, `gemini-nano-banana-2.1`. Поддерживаются проксирующие алиасы `nano-banana`, `nano-banana-pro`, `nano-banana-2`, `nano-banana-2.1`.
 - `image_size` не отправляется для 2.5 Flash (модель параметр не знает).
 
 ### OpenRouter
